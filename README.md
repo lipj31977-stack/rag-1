@@ -1,133 +1,121 @@
-# rag-1
-第一个简单的rag项目
-# 简化版RAG问答系统 - 项目结构
+# RAG 知识问答系统
 
-## 📁 完整目录结构
+基于 TF-IDF 向量检索 + 通义千问大模型的本地知识库问答系统。上传 TXT 文档即可通过网页界面进行智能问答。
+
+---
+
+## 项目结构
 
 ```
-RAG_Simplified_Project/
-├── README.md                    # 项目说明文档
-├── config.py                   # 配置文件
-├── main.py                     # FastAPI主程序
-├── requirements.txt            # Python依赖列表
-├── start.bat                   # Windows启动脚本
-└── start.sh                    # Linux/Mac启动脚本
-│
-├── core/
-│   └── qa_system.py          # RAG问答核心逻辑
-│
-├── utils/
-│   ├── chat_history.py       # 聊天记录管理
-│   ├── embeddings.py         # 向量化工具
-│   ├── text_processor.py     # 文本处理工具
-│   └── vector_store.py       # FAISS向量存储管理
-│
-└── data/                     # 数据存储目录
-    ├── documents/           # 上传的TXT文档
-    ├── vector_store.faiss   # FAISS索引文件
-    └── chat_history.json    # 聊天记录JSON文件
+├── rag_app.py      # 主程序（包含全部逻辑 + 内嵌网页前端）
+├── .env            # API 密钥与配置
+└── data/           # 运行后自动生成，存放向量索引和聊天记录
 ```
 
-## 🚀 核心功能
+> `config.py` 和 `text_processor.py` 已整合进 `rag_app.py`，**只需上述两个文件即可运行**。
 
-- **📄 TXT文档处理** - 支持TXT文件上传和自动分块向量化
-- **🧠 Qwen云端模型** - Embedding和生成都使用Qwen-max
-- **💾 本地FAISS存储** - 向量持久化保存到磁盘
-- **💬 聊天记录保存** - JSON格式保存对话历史
-- **⚡ FastAPI前端** - 简洁REST接口，无进度条显示
-- **🎯 一键启动** - 自动环境检查和依赖安装
+---
 
-## 📋 快速开始
+## 快速开始
 
-1. **进入项目目录**
-   ```bash
-   cd "RAG_Simplified_Project"
-   ```
+### 1. 环境要求
 
-2. **安装依赖**
-   ```bash
-   pip install -r requirements.txt
-   ```
+- Python 3.8+
+- 已安装 `numpy` 和 `scikit-learn`
 
-3. **配置API密钥**
-   - 编辑 `config.py` 或 `.env` 文件
-   - 填入你的 Qwen API Key
-
-4. **启动服务**
-   ```bash
-   python main.py
-   ```
-   或运行启动脚本：
-   - Windows: `start.bat`
-   - Linux/Mac: `./start.sh`
-
-5. **访问API**
-   - 服务地址: `http://localhost:8000`
-   - API文档: `http://localhost:8000/docs`
-
-## 🔌 API接口
-
-### 上传文档
 ```bash
-curl -X POST "http://localhost:8000/upload" \
-     -H "Content-Type: multipart/form-data" \
-     -F "file=@your_document.txt"
+pip install numpy scikit-learn
 ```
 
-### 提问
+### 2. 配置 API Key（可选）
+
+编辑 `.env` 文件，填入通义千问 API Key：
+
+```env
+QWEN_API_KEY=sk-你的真实key
+QWEN_MODEL_NAME=qwen-max
+PORT=6666
+```
+
+- **有 Key**：检索后调用千问生成自然语言回答
+- **无 Key**：直接返回检索到的相关文档片段（同样可用）
+
+API Key 从 [阿里云百炼平台](https://dashscope.console.aliyun.com/) 获取。
+
+### 3. 启动
+
 ```bash
-curl -X POST "http://localhost:8000/ask" \
-     -H "Content-Type: application/json" \
-     -d '{"query": "你是什么类型的模型？"}'
+python3 rag_app.py
 ```
 
-### 获取聊天历史
-```bash
-curl "http://localhost:8000/history?limit=10"
+浏览器打开 **http://localhost:6666** 即可使用。
+
+---
+
+## 功能说明
+
+| 功能 | 说明 |
+|------|------|
+| 上传文档 | 支持 TXT 格式，自动分块并建立向量索引 |
+| 智能问答 | 输入问题，检索知识库中最相关的内容并生成回答 |
+| 聊天记录 | 自动保存最近 100 条对话，支持查看和清空 |
+| 清空知识库 | 一键清除所有已索引的文档数据 |
+
+---
+
+## 技术方案
+
+```
+用户提问
+   │
+   ▼
+TF-IDF 向量化（字符级 n-gram，适配中文）
+   │
+   ▼
+余弦相似度检索 Top-K 片段
+   │
+   ▼
+┌──────────────────────────────┐
+│ 有 QWEN_API_KEY？            │
+│  是 → 调用千问 API 生成回答  │
+│  否 → 直接返回检索片段       │
+└──────────────────────────────┘
+   │
+   ▼
+返回结果 + 来源标注
 ```
 
-### 清空聊天记录
-```bash
-curl -X DELETE "http://localhost:8000/clear-history"
-```
+- **向量化**：`sklearn.TfidfVectorizer`，使用 `char_wb` 分析器 + (2,4)-gram，无需分词器即可处理中文
+- **检索**：`sklearn.metrics.pairwise.cosine_similarity`
+- **存储**：JSON 文件持久化（`data/` 目录下）
+- **服务**：Python 标准库 `http.server`，零额外依赖
 
-### 获取系统统计
-```bash
-curl "http://localhost:8000/stats"
-```
+---
 
-## ⚙️ 配置文件
+## API 接口
 
-`config.py` 包含以下配置项：
+系统同时提供 REST API，可供其他程序调用：
 
-- `QWEN_API_KEY`: Qwen API密钥
-- `QWEN_MODEL_NAME`: Qwen模型名称（默认：qwen-max）
-- `EMBEDDING_MODEL_NAME`: 向量化模型（默认：nghuyong/ernie-3.0-nano-zh）
-- `VECTOR_DIMENSION`: 向量维度（默认：768）
-- `CHUNK_SIZE`: 文本分块大小（默认：500字符）
-- `CHUNK_OVERLAP`: 分块重叠大小（默认：50字符）
-- `TOP_K_RESULTS`: 搜索结果返回数量（默认：5）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/` | 网页前端 |
+| `POST` | `/api/upload` | 上传 TXT 文档（multipart/form-data） |
+| `POST` | `/api/ask` | 提问，body: `{"query": "问题"}` |
+| `GET` | `/api/stats` | 获取知识库统计信息 |
+| `GET` | `/api/history` | 获取聊天记录 |
+| `POST` | `/api/clear-knowledge` | 清空知识库 |
+| `POST` | `/api/clear-history` | 清空聊天记录 |
 
-## 📊 数据持久化
+---
 
-- **向量存储**: FAISS索引保存到 `data/vector_store.faiss`
-- **聊天记录**: JSON格式保存到 `data/chat_history.json`
-- **上传文档**: 保存到 `data/documents/` 目录
+## 常见问题
 
-## 🛠️ 技术栈
+**Q：不配置 API Key 能用吗？**
+可以。系统会直接返回检索到的原文片段和相关度评分，只是不会用大模型重新组织语言。
 
-- **后端框架**: FastAPI + Uvicorn
-- **向量化**: Sentence Transformers (Ernie-3.0-nano-zh)
-- **向量检索**: FAISS
-- **语言模型**: Qwen Cloud API
-- **数据存储**: JSON + FAISS
-- **配置管理**: 环境变量
+**Q：支持什么格式的文档？**
+目前支持 TXT 纯文本文件。如需扩展 PDF/DOCX 支持，可在 `extract_text()` 函数中添加对应解析逻辑。
 
-## 🎯 项目特点
+**Q：数据存在哪里？**
+运行后自动在同目录下生成 `data/` 文件夹，包含 `vector_store.json`（向量索引）和 `chat_history.json`（聊天记录）。
 
-- ✅ **纯TXT支持** - 专注TXT文档处理
-- ✅ **云端模型统一** - Embedding和生成都用Qwen
-- ✅ **本地向量存储** - 高效的相似度搜索
-- ✅ **聊天记录功能** - 完整的对话历史保存
-- ✅ **简洁API设计** - 无复杂UI，纯REST接口
-- ✅ **一键部署** - 自动环境检测和依赖安装
